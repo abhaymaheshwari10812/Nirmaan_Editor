@@ -43,20 +43,24 @@ function App() {
   const startWebcam = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' }, // rear camera on phones
+        video: { facingMode: 'environment' },
         audio: false,
       });
       streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-      }
-      setWebcamActive(true);
+      setWebcamActive(true); // render <video> first, then attach in useEffect
     } catch (err) {
       alert('Could not access camera. Please allow camera permissions and try again.');
       console.error(err);
     }
   };
+
+  // Attach stream to video element AFTER it is rendered in the DOM
+  useEffect(() => {
+    if (webcamActive && videoRef.current && streamRef.current) {
+      videoRef.current.srcObject = streamRef.current;
+      videoRef.current.play().catch(console.error);
+    }
+  }, [webcamActive]);
 
   const stopWebcam = () => {
     if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
@@ -288,7 +292,13 @@ function App() {
                 playsInline
                 muted
                 className="webcam-video"
-                style={{ border: `3px solid ${livePrediction?.isCrack ? 'var(--red)' : livePrediction ? 'var(--green)' : 'var(--border)'}` }}
+                style={{
+                  border: `3px solid ${livePrediction?.isCrack ? 'var(--red)' : livePrediction ? 'var(--green)' : 'var(--border)'}`,
+                  display: 'block',
+                  width: '100%',
+                  minHeight: '200px',
+                  backgroundColor: '#000',
+                }}
               />
               {livePrediction?.isCrack && (
                 <div className="image-overlay">
