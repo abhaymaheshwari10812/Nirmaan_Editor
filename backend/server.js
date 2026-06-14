@@ -18,12 +18,12 @@ const transporter = nodemailer.createTransport({
 
 app.post('/api/send-alert', async (req, res) => {
   try {
-    const { message, image } = req.body;
+    const { message, image, recipientEmail } = req.body;
     
     const mailOptions = {
-      from: `"Nirmaan Alerts" <${process.env.EMAIL_USER}>`,
-      to: 'justbored0812@gmail.com',
-      subject: '🚨 Nirmaan Alert: Crack Detected',
+      from: `"Road Inspector Alerts" <${process.env.EMAIL_USER}>`,
+      to: recipientEmail || 'justbored0812@gmail.com',
+      subject: '🚨 Road Inspector Alert: Crack Detected',
       text: message || 'A crack was detected in one of the uploaded images.',
     };
 
