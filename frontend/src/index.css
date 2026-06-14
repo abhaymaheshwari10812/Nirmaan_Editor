@@ -141,6 +141,65 @@ body {
   color: var(--muted); letter-spacing: 0.1em; margin-bottom: 3px;
 }
 
+/* ─── Webcam Section ─── */
+.webcam-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+.webcam-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  gap: 8px; flex-wrap: wrap;
+}
+.webcam-title {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; font-weight: 600;
+}
+.live-badge {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.05em;
+  padding: 3px 8px; border-radius: 20px;
+}
+.live-danger { color: var(--red); background: rgba(239,68,68,0.12); }
+.live-safe   { color: var(--green); background: rgba(34,197,94,0.12); }
+
+.btn-webcam {
+  display: flex; align-items: center; gap: 6px;
+  padding: 7px 14px; border-radius: 8px; border: none;
+  font-family: inherit; font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: all 0.2s;
+}
+.btn-webcam.start { background: var(--blue); color: #fff; }
+.btn-webcam.start:hover { background: #3a78f5; }
+.btn-webcam.stop  { background: rgba(239,68,68,0.15); color: var(--red); border: 1px solid rgba(239,68,68,0.3); }
+.btn-webcam.stop:hover { background: rgba(239,68,68,0.25); }
+
+.btn-snapshot {
+  display: flex; align-items: center; gap: 6px;
+  padding: 7px 12px; border-radius: 8px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.05); color: var(--text);
+  font-family: inherit; font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: all 0.2s;
+}
+.btn-snapshot:hover { background: rgba(255,255,255,0.1); }
+
+.webcam-wrap { position: relative; }
+.webcam-video {
+  width: 100%; display: block;
+  max-height: 320px; object-fit: cover;
+  border-radius: 0;
+}
+.webcam-placeholder {
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 2rem 1rem; gap: 6px;
+  color: var(--muted); font-size: 13px; text-align: center;
+}
+
 /* ─── Dropzone ─── */
 .dropzone {
   background: var(--surface);
