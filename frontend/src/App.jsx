@@ -5,7 +5,7 @@ import * as tmImage from '@teachablemachine/image';
 import '@tensorflow/tfjs';
 import exifr from 'exifr';
 
-const URL = 'https://teachablemachine.withgoogle.com/models/JILKj4N_4/';
+const MODEL_URL = 'https://teachablemachine.withgoogle.com/models/JILKj4N_4/';
 
 function App() {
   const [model, setModel] = useState(null);
@@ -17,108 +17,99 @@ function App() {
   useEffect(() => {
     async function loadModel() {
       try {
-        const timestamp = new Date().getTime();
-        const modelURL = `${URL}model.json?t=${timestamp}`;
-        const metadataURL = `${URL}metadata.json?t=${timestamp}`;
-        const loadedModel = await tmImage.load(modelURL, metadataURL);
-        setModel(loadedModel);
+        const t = Date.now();
+        const loaded = await tmImage.load(
+          `${MODEL_URL}model.json?t=${t}`,
+          `${MODEL_URL}metadata.json?t=${t}`
+        );
+        setModel(loaded);
         setIsLoadingModel(false);
       } catch (err) {
-        console.error("Failed to load model", err);
+        console.error('Failed to load model', err);
       }
     }
     loadModel();
   }, []);
 
-  const sendAlert = async (file) => {
+  const sendAlert = useCallback(async (file) => {
     if (alertSent) return;
-
     const reader = new FileReader();
     reader.readAsDataURL(file);
     reader.onloadend = async () => {
-      const base64data = reader.result;
       try {
         const res = await fetch('http://localhost:5000/api/send-alert', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
+          body: JSON.stringify({
             message: 'A crack was detected in an uploaded image.',
-            image: base64data,
-            recipientEmail: targetEmail
-          })
+            image: reader.result,
+            recipientEmail: targetEmail,
+          }),
         });
-        if (res.ok) {
-          setAlertSent(true);
-        }
-      } catch (error) {
-        console.error('Failed to send alert email', error);
+        if (res.ok) setAlertSent(true);
+      } catch (e) {
+        console.error('Failed to send alert email', e);
       }
     };
-  };
+  }, [alertSent, targetEmail]);
 
-  const processImage = async (file) => {
+  const processImage = useCallback(async (file) => {
     let gpsData = null;
-    try {
-      gpsData = await exifr.gps(file);
-    } catch (e) {
-      console.warn("No EXIF GPS data found", e);
-    }
+    try { gpsData = await exifr.gps(file); } catch (_) {}
 
     return new Promise((resolve) => {
       const img = new Image();
-      const objectUrl = window.URL.createObjectURL(file);
+      const objectUrl = URL.createObjectURL(file);
       img.src = objectUrl;
       img.onload = async () => {
-        if (model) {
-          const prediction = await model.predict(img);
-          const topPrediction = prediction.reduce((prev, current) => 
-            (prev.probability > current.probability) ? prev : current
-          );
-          const rawClassName = topPrediction.className;
-          const isCrack = rawClassName.toLowerCase() === 'crack';
-          const displayClass = rawClassName === 'No Crackl' ? 'No Crack' : rawClassName;
-
-          if (isCrack) {
-            sendAlert(file);
-          }
-
-          resolve({
-            id: Math.random().toString(36).substr(2, 9),
-            file,
-            preview: objectUrl,
-            predictions: prediction,
-            topClass: displayClass,
-            rawClass: rawClassName,
-            isCrack,
-            timestamp: new Date().toLocaleTimeString('en-US', { hour12: false }),
-            gps: gpsData
-          });
-        }
+        if (!model) return;
+        const prediction = await model.predict(img);
+        const top = prediction.reduce((a, b) => a.probability > b.probability ? a : b);
+        const isCrack = top.className.toLowerCase() === 'crack';
+        const displayClass = top.className === 'No Crackl' ? 'No Crack' : top.className;
+        if (isCrack) sendAlert(file);
+        resolve({
+          id: Math.random().toString(36).substr(2, 9),
+          preview: objectUrl,
+          predictions: prediction,
+          topClass: displayClass,
+          rawClass: top.className,
+          isCrack,
+          timestamp: new Date().toLocaleTimeString('en-US', { hour12: false }),
+          gps: gpsData,
+        });
       };
     });
-  };
+  }, [model, sendAlert]);
 
   const onDrop = useCallback(async (acceptedFiles) => {
-    const newResults = await Promise.all(acceptedFiles.map(file => processImage(file)));
+    const newResults = await Promise.all(acceptedFiles.map(f => processImage(f)));
     setResults(prev => [...newResults, ...prev]);
-  }, [model, alertSent, targetEmail]);
+  }, [processImage]);
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop, accept: {'image/*': []} });
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: { 'image/*': [] },
+  });
 
   if (isLoadingModel) {
     return (
       <div className="loading-state">
         <FiCpu className="init-icon" />
         <div className="init-title">Initializing Systems</div>
-        <div className="init-sub">Loading Teachable Machine Model components and neural networks. Please stand by...</div>
+        <div className="init-sub">Loading neural network model components. Please stand by...</div>
       </div>
     );
   }
 
-  const latestResult = results[0];
+  const latest = results[0];
+  const getConf = (res) =>
+    (res.predictions.find(p => p.className === res.rawClass).probability * 100);
 
   return (
     <div id="app">
+
+      {/* ── Header ── */}
       <header id="header">
         <div className="brand">
           <div className="brand-logo">R</div>
@@ -127,151 +118,166 @@ function App() {
             <p>REAL-TIME INFRASTRUCTURE MONITORING</p>
           </div>
         </div>
-        <div className="header-right">
-          <div id="sys-status">
-            <div className="status-dot"></div>
-            Monitoring Active
-          </div>
+        <div id="sys-status">
+          <div className="status-dot" />
+          Monitoring Active
         </div>
       </header>
 
-      <div id="feed" style={{ padding: '2rem', overflowY: 'auto' }}>
+      {/* ── Feed ── */}
+      <div id="feed">
+
         {alertSent && (
           <div className="alert-banner">
-            <FiAlertTriangle size={24} />
-            <div>
-              <strong>Alert Sent!</strong> An email has been dispatched regarding the detected crack.
-            </div>
+            <FiAlertTriangle size={20} style={{ flexShrink: 0 }} />
+            <div><strong>Alert Sent!</strong> Email dispatched for detected crack.</div>
           </div>
         )}
 
-        <div className="email-input-container" style={{ marginBottom: '2rem', display: 'flex', alignItems: 'center', background: 'var(--surface)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border)' }}>
-          <FiMail size={20} style={{ color: 'var(--blue)', marginRight: '1rem' }} />
-          <div style={{ flex: 1 }}>
-            <label style={{ display: 'block', fontSize: '10px', textTransform: 'uppercase', color: 'var(--muted)', letterSpacing: '0.1em', marginBottom: '0.25rem' }}>Alert Email Destination</label>
-            <input 
-              type="email" 
-              placeholder="Enter email to receive alerts (e.g., engineer@city.gov)" 
+        {/* Email Input */}
+        <div className="email-input-container">
+          <FiMail size={18} style={{ color: 'var(--blue)', flexShrink: 0 }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <label className="email-label">Alert Email Destination</label>
+            <input
+              type="email"
+              placeholder="engineer@city.gov"
               value={targetEmail}
-              onChange={(e) => setTargetEmail(e.target.value)}
-              style={{ width: '100%', background: 'transparent', border: 'none', color: 'var(--text)', outline: 'none', fontSize: '14px' }}
+              onChange={e => setTargetEmail(e.target.value)}
             />
           </div>
         </div>
 
+        {/* Dropzone */}
         <div {...getRootProps()} className={`dropzone ${isDragActive ? 'active' : ''}`}>
           <input {...getInputProps()} />
           <FiUploadCloud className="dropzone-icon" />
-          <h3 style={{fontSize: '1.2rem', marginBottom: '0.5rem'}}>
-            {isDragActive ? "Drop images here..." : "Drag & Drop images here, or click to select"}
-          </h3>
-          <p style={{color: 'var(--muted)', fontSize: '0.9rem'}}>Upload structures, walls, or surfaces for automated inspection.</p>
+          <h3>{isDragActive ? 'Drop images here…' : 'Tap to upload or drag & drop'}</h3>
+          <p>Upload road surfaces for automated crack inspection.</p>
         </div>
 
-        {latestResult && (
-          <div style={{ marginTop: '2rem', position: 'relative' }}>
-             <img src={latestResult.preview} alt="Latest Scan" style={{ width: '100%', maxHeight: '400px', objectFit: 'cover', borderRadius: '12px', border: `3px solid ${latestResult.isCrack ? 'var(--red)' : 'var(--green)'}` }} />
-             {latestResult.isCrack && (
-               <div style={{ position: 'absolute', top: '16px', left: '16px', background: 'rgba(13,20,38,0.9)', padding: '16px', borderRadius: '12px', border: '1px solid var(--border)', minWidth: '200px' }}>
-                 <div style={{ color: 'var(--red)', fontSize: '11px', fontWeight: 'bold', letterSpacing: '0.1em', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                    <div className="status-dot error"></div> CRACK DETECTED
-                 </div>
-                 <div className="info-row">
-                   <span className="ir-key">Confidence</span>
-                   <span className="ir-val">{(latestResult.predictions.find(p => p.className === latestResult.rawClass).probability * 100).toFixed(0)}%</span>
-                 </div>
-                 <div className="info-row">
-                   <span className="ir-key">Detected</span>
-                   <span className="ir-val">{latestResult.timestamp}</span>
-                 </div>
-               </div>
-             )}
+        {/* Latest scanned image */}
+        {latest && (
+          <div className="latest-image-wrap">
+            <img
+              src={latest.preview}
+              alt="Latest Scan"
+              style={{ border: `3px solid ${latest.isCrack ? 'var(--red)' : 'var(--green)'}` }}
+            />
+            {latest.isCrack && (
+              <div className="image-overlay">
+                <div className="overlay-label">
+                  <div className="status-dot error" /> CRACK DETECTED
+                </div>
+                <div className="info-row">
+                  <span className="ir-key">Confidence</span>
+                  <span className="ir-val">{getConf(latest).toFixed(0)}%</span>
+                </div>
+                <div className="info-row">
+                  <span className="ir-key">Detected</span>
+                  <span className="ir-val">{latest.timestamp}</span>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
-      
+
+      {/* ── Sidebar ── */}
       <div id="sidebar">
+
+        {/* Live Prediction */}
         <div className="sidebar-section">
           <div className="sec-label">LIVE PREDICTION</div>
-          {latestResult ? (
-            <div className="pred-big" style={{ borderColor: latestResult.isCrack ? 'var(--red)' : 'var(--green)' }}>
-               <div className={`pred-class ${latestResult.isCrack ? 'crack' : 'nocrack'}`}>
-                 {latestResult.topClass}
-               </div>
-               <div className="pred-conf">
-                 Confidence: {(latestResult.predictions.find(p => p.className === latestResult.rawClass).probability * 100).toFixed(1)}%
-               </div>
-               <div className="conf-bar">
-                 <div className={`conf-fill ${latestResult.isCrack ? 'crack' : ''}`} style={{ width: `${(latestResult.predictions.find(p => p.className === latestResult.rawClass).probability * 100)}%` }}></div>
-               </div>
+          {latest ? (
+            <div className="pred-big" style={{ borderColor: latest.isCrack ? 'var(--red)' : 'var(--green)' }}>
+              <div className={`pred-class ${latest.isCrack ? 'crack' : 'nocrack'}`}>
+                {latest.topClass}
+              </div>
+              <div className="pred-conf">Confidence: {getConf(latest).toFixed(1)}%</div>
+              <div className="conf-bar">
+                <div
+                  className={`conf-fill ${latest.isCrack ? 'crack' : ''}`}
+                  style={{ width: `${getConf(latest)}%` }}
+                />
+              </div>
             </div>
           ) : (
             <div className="pred-big">
-               <div className="pred-class waiting">Waiting...</div>
+              <div className="pred-class waiting">Waiting…</div>
             </div>
           )}
 
-          {latestResult && (
-            <div className="pred-rows" style={{ marginTop: '1rem' }}>
-              {latestResult.predictions.map(p => {
-                const isMatchClass = p.className === latestResult.rawClass;
+          {latest && (
+            <div className="pred-rows">
+              {latest.predictions.map(p => {
                 const isCrackClass = p.className.toLowerCase() === 'crack';
+                const isMatch = p.className === latest.rawClass;
                 return (
                   <div key={p.className} className="pred-row">
                     <div className="pred-row-header">
-                      <span className="pr-label" style={{ color: isMatchClass ? (isCrackClass ? 'var(--red)' : 'var(--green)') : 'var(--muted)' }}>
+                      <span className="pr-label" style={{
+                        color: isMatch ? (isCrackClass ? 'var(--red)' : 'var(--green)') : 'var(--muted)'
+                      }}>
                         {p.className === 'No Crackl' ? 'No Crack' : p.className}
                       </span>
                       <span className="pr-pct">{(p.probability * 100).toFixed(1)}%</span>
                     </div>
                     <div className="pr-bar">
-                      <div className="pr-fill" style={{ width: `${(p.probability * 100)}%`, background: isCrackClass ? 'var(--red)' : 'var(--blue)' }}></div>
+                      <div className="pr-fill" style={{
+                        width: `${p.probability * 100}%`,
+                        background: isCrackClass ? 'var(--red)' : 'var(--blue)',
+                      }} />
                     </div>
                   </div>
-                )
+                );
               })}
             </div>
           )}
         </div>
 
-        {latestResult && (
+        {/* Location */}
+        {latest && (
           <div className="sidebar-section">
             <div className="sec-label">LOCATION</div>
             <div className="info-row">
               <span className="ir-key">Latitude</span>
-              <span className="ir-val">{latestResult.gps ? latestResult.gps.latitude.toFixed(6) : 'Unknown'}</span>
+              <span className="ir-val">{latest.gps ? latest.gps.latitude.toFixed(6) : 'Unknown'}</span>
             </div>
             <div className="info-row">
               <span className="ir-key">Longitude</span>
-              <span className="ir-val">{latestResult.gps ? latestResult.gps.longitude.toFixed(6) : 'Unknown'}</span>
+              <span className="ir-val">{latest.gps ? latest.gps.longitude.toFixed(6) : 'Unknown'}</span>
             </div>
             <div className="info-row">
               <span className="ir-key">GPS Status</span>
-              <span className="ir-val" style={{ color: latestResult.gps ? 'var(--green)' : 'var(--orange)' }}>
-                {latestResult.gps ? 'Acquired' : 'No EXIF Data'}
+              <span className="ir-val" style={{ color: latest.gps ? 'var(--green)' : 'var(--orange)' }}>
+                {latest.gps ? 'Acquired' : 'No EXIF Data'}
               </span>
             </div>
           </div>
         )}
       </div>
 
+      {/* ── History ── */}
       <div id="history">
         <div className="hist-header">
           <div className="hist-title">DETECTION HISTORY — THIS SESSION</div>
           <div id="hist-count">{results.length} events</div>
         </div>
-        <div id="hist-list" style={{ flex: 1, overflowY: 'auto', padding: '0 20px' }}>
-          {results.map((res, i) => (
-             <div key={res.id} style={{ display: 'flex', alignItems: 'center', gap: '20px', padding: '12px 0', borderBottom: '1px solid var(--border)' }}>
-               <div className={`badge ${res.isCrack ? 'badge-danger' : 'badge-success'}`} style={{ marginTop: 0, width: '80px', textAlign: 'center' }}>
-                 {res.isCrack ? 'CRACK' : 'SAFE'}
-               </div>
-               <div style={{ color: 'var(--muted)', fontSize: '13px', flex: 1 }}>{res.id}</div>
-               <div style={{ color: res.isCrack ? 'var(--red)' : 'var(--green)', fontSize: '13px', fontWeight: 'bold' }}>
-                 {(res.predictions.find(p => p.className === res.rawClass).probability * 100).toFixed(0)}%
-               </div>
-               <div style={{ color: 'var(--muted)', fontSize: '13px' }}>{res.timestamp}</div>
-             </div>
+        <div id="hist-list">
+          {results.map(res => (
+            <div key={res.id} className="hist-row">
+              <div className={`badge ${res.isCrack ? 'badge-danger' : 'badge-success'}`}>
+                {res.isCrack ? 'CRACK' : 'SAFE'}
+              </div>
+              <div style={{ color: 'var(--muted)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {res.id}
+              </div>
+              <div style={{ color: res.isCrack ? 'var(--red)' : 'var(--green)', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+                {getConf(res).toFixed(0)}%
+              </div>
+              <div style={{ color: 'var(--muted)', whiteSpace: 'nowrap' }}>{res.timestamp}</div>
+            </div>
           ))}
         </div>
       </div>
