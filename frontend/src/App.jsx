@@ -13,6 +13,8 @@ function App() {
   const [results, setResults] = useState([]);
   const [alertSent, setAlertSent] = useState(false);
   const [targetEmail, setTargetEmail] = useState('');
+  const [deviceGps, setDeviceGps] = useState(null);
+  const [gpsStatus, setGpsStatus] = useState('Requesting...');
 
   // Webcam state
   const [webcamActive, setWebcamActive] = useState(false);
@@ -37,6 +39,27 @@ function App() {
       }
     }
     loadModel();
+  }, []);
+
+  // ── Browser Geolocation ──
+  useEffect(() => {
+    if (!navigator.geolocation) {
+      setGpsStatus('Not supported');
+      return;
+    }
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        setDeviceGps({ latitude: pos.coords.latitude, longitude: pos.coords.longitude, accuracy: pos.coords.accuracy });
+        setGpsStatus('Acquired');
+      },
+      (err) => {
+        if (err.code === 1) setGpsStatus('Permission Denied');
+        else if (err.code === 2) setGpsStatus('Unavailable');
+        else setGpsStatus('Timeout');
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+    return () => navigator.geolocation.clearWatch(watchId);
   }, []);
 
   // ── Webcam logic ──
@@ -122,7 +145,7 @@ function App() {
       rawClass: livePrediction.top.className,
       isCrack: livePrediction.isCrack,
       timestamp: new Date().toLocaleTimeString('en-US', { hour12: false }),
-      gps: null,
+      gps: deviceGps || null,
     }, ...prev]);
   };
 
@@ -151,8 +174,10 @@ function App() {
   }, [alertSent, targetEmail]);
 
   const processImage = useCallback(async (file) => {
+    // Try EXIF first, fall back to device GPS
     let gpsData = null;
     try { gpsData = await exifr.gps(file); } catch (_) {}
+    if (!gpsData && deviceGps) gpsData = deviceGps;
     return new Promise((resolve) => {
       const img = new Image();
       const objectUrl = URL.createObjectURL(file);
@@ -403,25 +428,33 @@ function App() {
         </div>
 
         {/* Location */}
-        {latest && (
-          <div className="sidebar-section">
-            <div className="sec-label">LOCATION</div>
-            <div className="info-row">
-              <span className="ir-key">Latitude</span>
-              <span className="ir-val">{latest.gps ? latest.gps.latitude.toFixed(6) : 'Unknown'}</span>
-            </div>
-            <div className="info-row">
-              <span className="ir-key">Longitude</span>
-              <span className="ir-val">{latest.gps ? latest.gps.longitude.toFixed(6) : 'Unknown'}</span>
-            </div>
-            <div className="info-row">
-              <span className="ir-key">GPS Status</span>
-              <span className="ir-val" style={{ color: latest.gps ? 'var(--green)' : 'var(--orange)' }}>
-                {latest.gps ? 'Acquired' : 'No EXIF Data'}
-              </span>
-            </div>
+        <div className="sidebar-section">
+          <div className="sec-label">LOCATION</div>
+          <div className="info-row">
+            <span className="ir-key">Latitude</span>
+            <span className="ir-val">
+              {latest?.gps ? latest.gps.latitude.toFixed(6) : deviceGps ? deviceGps.latitude.toFixed(6) : '—'}
+            </span>
           </div>
-        )}
+          <div className="info-row">
+            <span className="ir-key">Longitude</span>
+            <span className="ir-val">
+              {latest?.gps ? latest.gps.longitude.toFixed(6) : deviceGps ? deviceGps.longitude.toFixed(6) : '—'}
+            </span>
+          </div>
+          {deviceGps?.accuracy && (
+            <div className="info-row">
+              <span className="ir-key">Accuracy</span>
+              <span className="ir-val">{deviceGps.accuracy.toFixed(0)} m</span>
+            </div>
+          )}
+          <div className="info-row">
+            <span className="ir-key">GPS Status</span>
+            <span className="ir-val" style={{ color: gpsStatus === 'Acquired' ? 'var(--green)' : gpsStatus === 'Requesting...' ? 'var(--orange)' : 'var(--red)' }}>
+              {gpsStatus}
+            </span>
+          </div>
+        </div>
       </div>
 
       {/* ── History ── */}
