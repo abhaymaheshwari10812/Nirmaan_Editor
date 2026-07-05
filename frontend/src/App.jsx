@@ -1,13 +1,17 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { FiUploadCloud, FiAlertTriangle, FiCpu, FiMail, FiVideo, FiVideoOff, FiCamera } from 'react-icons/fi';
+import { FiUploadCloud, FiAlertTriangle, FiCpu, FiMail, FiVideo, FiVideoOff, FiCamera, FiDatabase } from 'react-icons/fi';
 import * as tmImage from '@teachablemachine/image';
 import '@tensorflow/tfjs';
 import exifr from 'exifr';
+import Login from './Login';
+import DatabaseView from './DatabaseView';
 
 const MODEL_URL = 'https://teachablemachine.withgoogle.com/models/JILKj4N_4/';
 
 function App() {
+  const [currentUser, setCurrentUser] = useState(null);
+  const [showDatabase, setShowDatabase] = useState(false);
   const [model, setModel] = useState(null);
   const [isLoadingModel, setIsLoadingModel] = useState(true);
   const [results, setResults] = useState([]);
@@ -129,6 +133,17 @@ function App() {
     return () => { if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current); };
   }, [webcamActive, model, targetEmail]);
 
+  const saveCrackToDB = async (crackObj) => {
+    if (!crackObj.isCrack) return;
+    try {
+      await fetch('http://localhost:5000/api/save-crack', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(crackObj),
+      });
+    } catch (e) { console.error('DB save error', e); }
+  };
+
   // Capture snapshot from webcam and add to history
   const captureSnapshot = () => {
     if (!videoRef.current || !livePrediction) return;
@@ -137,16 +152,19 @@ function App() {
     canvas.height = videoRef.current.videoHeight;
     canvas.getContext('2d').drawImage(videoRef.current, 0, 0);
     const preview = canvas.toDataURL('image/jpeg');
-    setResults(prev => [{
+    const newCrack = {
       id: Math.random().toString(36).substr(2, 9),
       preview,
       predictions: livePrediction.prediction,
       topClass: livePrediction.displayClass,
       rawClass: livePrediction.top.className,
       isCrack: livePrediction.isCrack,
-      timestamp: new Date().toLocaleTimeString('en-US', { hour12: false }),
+      timestamp: new Date().toISOString(),
       gps: deviceGps || null,
-    }, ...prev]);
+      confidence: livePrediction.top.probability * 100
+    };
+    setResults(prev => [newCrack, ...prev]);
+    saveCrackToDB(newCrack);
   };
 
   // Cleanup on unmount
@@ -173,35 +191,45 @@ function App() {
     };
   }, [alertSent, targetEmail]);
 
+  const fileToBase64 = (f) => new Promise(res => { const r = new FileReader(); r.onloadend = () => res(r.result); r.readAsDataURL(f); });
+
   const processImage = useCallback(async (file) => {
     // Try EXIF first, fall back to device GPS
     let gpsData = null;
     try { gpsData = await exifr.gps(file); } catch (_) {}
     if (!gpsData && deviceGps) gpsData = deviceGps;
+    const base64Data = await fileToBase64(file);
+    
     return new Promise((resolve) => {
       const img = new Image();
-      const objectUrl = URL.createObjectURL(file);
-      img.src = objectUrl;
+      img.src = base64Data;
       img.onload = async () => {
         if (!model) return;
         const prediction = await model.predict(img);
         const top = prediction.reduce((a, b) => a.probability > b.probability ? a : b);
         const isCrack = top.className.toLowerCase() === 'crack';
         const displayClass = top.className === 'No Crackl' ? 'No Crack' : top.className;
-        if (isCrack) sendAlert(file);
-        resolve({
+        
+        const newRes = {
           id: Math.random().toString(36).substr(2, 9),
-          preview: objectUrl,
+          preview: base64Data,
           predictions: prediction,
           topClass: displayClass,
           rawClass: top.className,
           isCrack,
-          timestamp: new Date().toLocaleTimeString('en-US', { hour12: false }),
+          timestamp: new Date().toISOString(),
           gps: gpsData,
-        });
+          confidence: top.probability * 100
+        };
+        
+        if (isCrack) {
+          sendAlert(file);
+          saveCrackToDB(newRes);
+        }
+        resolve(newRes);
       };
     });
-  }, [model, sendAlert]);
+  }, [model, sendAlert, deviceGps]);
 
   const onDrop = useCallback(async (acceptedFiles) => {
     const newResults = await Promise.all(acceptedFiles.map(f => processImage(f)));
@@ -212,6 +240,10 @@ function App() {
     onDrop,
     accept: { 'image/*': [] },
   });
+
+  if (!currentUser) {
+    return <Login onLoginSuccess={setCurrentUser} />;
+  }
 
   if (isLoadingModel) {
     return (
@@ -234,6 +266,7 @@ function App() {
 
   return (
     <div id="app">
+      {showDatabase && <DatabaseView onClose={() => setShowDatabase(false)} />}
 
       {/* ── Header ── */}
       <header id="header">
@@ -244,9 +277,20 @@ function App() {
             <p>REAL-TIME INFRASTRUCTURE MONITORING</p>
           </div>
         </div>
-        <div id="sys-status">
-          <div className="status-dot" />
-          Monitoring Active
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <div id="sys-status">
+            <div className="status-dot" />
+            Monitoring Active
+          </div>
+          <div className="user-badge">
+            <div className="user-info">
+              <div className="user-name">{currentUser.email}</div>
+              <div className="user-role">{currentUser.role}</div>
+            </div>
+            <button className="btn-logout" onClick={() => setCurrentUser(null)}>
+              Logout
+            </button>
+          </div>
         </div>
       </header>
 
@@ -346,6 +390,13 @@ function App() {
             </div>
           )}
         </div>
+
+        {currentUser?.role === 'BMC Official' && (
+          <button className="btn-database" onClick={() => setShowDatabase(true)}>
+            <FiDatabase style={{ marginRight: '8px' }} />
+            Crack detection database
+          </button>
+        )}
 
         {/* Latest uploaded image */}
         {latest && !webcamActive && (
