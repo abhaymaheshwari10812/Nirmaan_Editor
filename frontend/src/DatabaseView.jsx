@@ -9,7 +9,7 @@ function DatabaseView({ onClose }) {
   useEffect(() => {
     async function fetchCracks() {
       try {
-        const response = await fetch('http://localhost:5000/api/get-cracks');
+        const response = await fetch('/api/get-cracks');
         const result = await response.json();
         if (result.success) {
           setCracks(result.data);

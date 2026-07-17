@@ -36,12 +36,35 @@ const transporter = nodemailer.createTransport({
 
 app.post('/api/send-alert', async (req, res) => {
   try {
-    const { message, image, recipientEmail } = req.body;
+    const { message, image, recipientEmail, gps, timestamp, confidence, topClass } = req.body;
+    
+    let locationStr = 'Not provided';
+    if (gps) {
+      if (gps.latitude && gps.longitude) {
+        locationStr = `Latitude: ${gps.latitude}, Longitude: ${gps.longitude}`;
+        if (gps.accuracy) locationStr += ` (Accuracy: ${gps.accuracy}m)`;
+      } else {
+        locationStr = JSON.stringify(gps);
+      }
+    }
+
+    const formattedTimestamp = timestamp ? new Date(timestamp).toLocaleString() : new Date().toLocaleString();
+    const formattedConfidence = typeof confidence === 'number' ? `${confidence.toFixed(2)}%` : (confidence || 'N/A');
+
+    const emailText = `${message || 'A crack was detected.'}
+
+--- Detection Details ---
+Timestamp: ${formattedTimestamp}
+Location: ${locationStr}
+Detection Class: ${topClass || 'Crack'}
+Confidence: ${formattedConfidence}
+`;
+
     const mailOptions = {
       from: `"Road Inspector Alerts" <${process.env.EMAIL_USER}>`,
       to: recipientEmail || process.env.EMAIL_USER,
       subject: '🚨 Road Inspector Alert: Crack Detected',
-      text: message || 'A crack was detected.',
+      text: emailText,
     };
     if (image) {
       const base64Data = image.split(',')[1];

@@ -121,6 +121,10 @@ function App() {
               body: JSON.stringify({
                 message: 'A crack was detected via live webcam feed.',
                 recipientEmail: targetEmail,
+                gps: deviceGps || null,
+                timestamp: new Date().toISOString(),
+                confidence: top.probability * 100,
+                topClass: displayClass
               }),
             });
           } catch (e) { console.error(e); }
@@ -171,7 +175,7 @@ function App() {
   useEffect(() => () => stopWebcam(), []);
 
   // ── Upload logic ──
-  const sendAlert = useCallback(async (file) => {
+  const sendAlert = useCallback(async (file, gpsData, timestamp, confidence, topClass) => {
     if (alertSent) return;
     const reader = new FileReader();
     reader.readAsDataURL(file);
@@ -184,6 +188,10 @@ function App() {
             message: 'A crack was detected in an uploaded image.',
             image: reader.result,
             recipientEmail: targetEmail,
+            gps: gpsData,
+            timestamp: timestamp,
+            confidence: confidence,
+            topClass: topClass
           }),
         });
         if (res.ok) setAlertSent(true);
@@ -223,7 +231,7 @@ function App() {
         };
         
         if (isCrack) {
-          sendAlert(file);
+          sendAlert(file, gpsData, newRes.timestamp, newRes.confidence, newRes.topClass);
           saveCrackToDB(newRes);
         }
         resolve(newRes);
