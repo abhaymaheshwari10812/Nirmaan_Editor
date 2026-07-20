@@ -45,6 +45,12 @@ function App() {
     loadModel();
   }, []);
 
+  useEffect(() => {
+    if (currentUser?.email) {
+      setTargetEmail(currentUser.email);
+    }
+  }, [currentUser]);
+
   // ── Browser Geolocation ──
   useEffect(() => {
     if (!navigator.geolocation) {
@@ -115,7 +121,7 @@ function App() {
           alertSentRef.current = true;
           setAlertSent(true);
           try {
-            await fetch('http://localhost:5000/api/send-alert', {
+            await fetch('/api/send-alert', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -140,7 +146,7 @@ function App() {
   const saveCrackToDB = async (crackObj) => {
     if (!crackObj.isCrack) return;
     try {
-      await fetch('http://localhost:5000/api/save-crack', {
+      await fetch('/api/save-crack', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(crackObj),
@@ -181,7 +187,7 @@ function App() {
     reader.readAsDataURL(file);
     reader.onloadend = async () => {
       try {
-        const res = await fetch('http://localhost:5000/api/send-alert', {
+        const res = await fetch('/api/send-alert', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -321,7 +327,11 @@ function App() {
               type="email"
               placeholder="engineer@city.gov"
               value={targetEmail}
-              onChange={e => setTargetEmail(e.target.value)}
+              onChange={e => {
+                setTargetEmail(e.target.value);
+                setAlertSent(false);
+                alertSentRef.current = false;
+              }}
             />
           </div>
         </div>
