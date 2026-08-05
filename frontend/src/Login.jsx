@@ -38,20 +38,18 @@ function Login({ onLoginSuccess }) {
     }
     
     try {
-      const res = await fetch('/api/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
-      });
-      const data = await res.json();
-      if (data.success) {
-        onLoginSuccess({ email: data.data.email, role: data.data.role });
+      const usersStr = localStorage.getItem('nirmaan_users');
+      const users = usersStr ? JSON.parse(usersStr) : [];
+      const user = users.find(u => u.email === email && u.password === password);
+      
+      if (user) {
+        onLoginSuccess({ email: user.email, role: user.role });
       } else {
-        setError(data.error || 'Invalid credentials.');
+        setError('Invalid credentials.');
       }
     } catch (err) {
       console.error('Login error', err);
-      setError('Failed to connect to server.');
+      setError('An error occurred during login.');
     }
   };
 
@@ -65,20 +63,22 @@ function Login({ onLoginSuccess }) {
     const assignedRole = code.trim().toLowerCase() === 'crack' ? 'BMC Official' : 'Civilian';
     
     try {
-      const res = await fetch('/api/create-account', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, role: assignedRole })
-      });
-      const data = await res.json();
-      if (data.success) {
-        onLoginSuccess({ email: data.data.email, role: data.data.role });
-      } else {
-        setError(data.error || 'Failed to create account.');
+      const usersStr = localStorage.getItem('nirmaan_users');
+      const users = usersStr ? JSON.parse(usersStr) : [];
+      
+      if (users.find(u => u.email === email)) {
+        setError('User already exists.');
+        return;
       }
+      
+      const newUser = { email, password, role: assignedRole };
+      users.push(newUser);
+      localStorage.setItem('nirmaan_users', JSON.stringify(users));
+      
+      onLoginSuccess({ email: newUser.email, role: newUser.role });
     } catch (err) {
       console.error('Registration error', err);
-      setError('Failed to connect to server.');
+      setError('An error occurred during registration.');
     }
   };
 
