@@ -75,6 +75,7 @@ Confidence: ${formattedConfidence}
 });
 
 const DB_FILE = path.join(__dirname, 'cracks_db.json');
+const USERS_DB_FILE = path.join(__dirname, 'users_db.json');
 
 const readDB = () => {
   if (!fs.existsSync(DB_FILE)) return [];
@@ -89,6 +90,21 @@ const readDB = () => {
 
 const writeDB = (data) => {
   fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
+};
+
+const readUsersDB = () => {
+  if (!fs.existsSync(USERS_DB_FILE)) return [];
+  try {
+    const data = fs.readFileSync(USERS_DB_FILE, 'utf8');
+    return JSON.parse(data);
+  } catch (err) {
+    console.error('Error reading Users DB:', err);
+    return [];
+  }
+};
+
+const writeUsersDB = (data) => {
+  fs.writeFileSync(USERS_DB_FILE, JSON.stringify(data, null, 2));
 };
 
 app.get('/api/get-cracks', (req, res) => {
@@ -123,6 +139,41 @@ app.post('/api/save-crack', (req, res) => {
   } catch (error) {
     console.error('Error saving crack:', error);
     res.status(500).json({ success: false, error: 'Failed to save crack' });
+  }
+});
+
+app.post('/api/create-account', (req, res) => {
+  try {
+    const { email, password, role } = req.body;
+    if (!email || !password || !role) {
+      return res.status(400).json({ success: false, error: 'Missing fields' });
+    }
+    const users = readUsersDB();
+    if (users.find(u => u.email === email)) {
+      return res.status(400).json({ success: false, error: 'User already exists' });
+    }
+    const newUser = { email, password, role };
+    users.push(newUser);
+    writeUsersDB(users);
+    res.status(200).json({ success: true, data: newUser });
+  } catch (error) {
+    console.error('Error creating account:', error);
+    res.status(500).json({ success: false, error: 'Failed to create account' });
+  }
+});
+
+app.post('/api/login', (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const users = readUsersDB();
+    const user = users.find(u => u.email === email && u.password === password);
+    if (!user) {
+      return res.status(401).json({ success: false, error: 'Invalid credentials' });
+    }
+    res.status(200).json({ success: true, data: user });
+  } catch (error) {
+    console.error('Error during login:', error);
+    res.status(500).json({ success: false, error: 'Login failed' });
   }
 });
 

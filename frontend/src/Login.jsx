@@ -30,17 +30,56 @@ function Login({ onLoginSuccess }) {
     }
   };
 
-  const handleLoginSubmit = (e) => {
+  const handleLoginSubmit = async (e) => {
     e.preventDefault();
     if (!email || !password) {
       setError('Please fill in all fields.');
       return;
     }
-    // Perform mockup login
-    onLoginSuccess({
-      email,
-      role: role === 'bmc_official' ? 'BMC Official' : 'Civilian',
-    });
+    
+    try {
+      const res = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      const data = await res.json();
+      if (data.success) {
+        onLoginSuccess({ email: data.data.email, role: data.data.role });
+      } else {
+        setError(data.error || 'Invalid credentials.');
+      }
+    } catch (err) {
+      console.error('Login error', err);
+      setError('Failed to connect to server.');
+    }
+  };
+
+  const handleRegisterSubmit = async (e) => {
+    e.preventDefault();
+    if (!email || !password) {
+      setError('Email and Password are required.');
+      return;
+    }
+    
+    const assignedRole = code.trim().toLowerCase() === 'crack' ? 'BMC Official' : 'Civilian';
+    
+    try {
+      const res = await fetch('/api/create-account', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, role: assignedRole })
+      });
+      const data = await res.json();
+      if (data.success) {
+        onLoginSuccess({ email: data.data.email, role: data.data.role });
+      } else {
+        setError(data.error || 'Failed to create account.');
+      }
+    } catch (err) {
+      console.error('Registration error', err);
+      setError('Failed to connect to server.');
+    }
   };
 
   const handleGoogleLogin = useGoogleLogin({
@@ -107,6 +146,16 @@ function Login({ onLoginSuccess }) {
                 <span className="role-title">BMC Official</span>
                 <span className="role-desc">Access official monitoring systems</span>
               </div>
+            </div>
+            
+            <div style={{ textAlign: 'center', marginTop: '20px' }}>
+              <button 
+                type="button" 
+                className="btn-secondary" 
+                onClick={() => { setStep('register'); setError(''); setCode(''); setEmail(''); setPassword(''); }}
+              >
+                Create Account
+              </button>
             </div>
           </div>
         )}
@@ -202,6 +251,69 @@ function Login({ onLoginSuccess }) {
 
             <button type="button" className="btn-secondary" onClick={handleGoBack}>
               <FiArrowLeft style={{ marginRight: '6px', verticalAlign: 'middle' }} /> Change Role
+            </button>
+          </form>
+        )}
+
+        {step === 'register' && (
+          <form onSubmit={handleRegisterSubmit} className="login-form">
+            <div style={{ textAlign: 'center', fontSize: '16px', fontWeight: 'bold', marginBottom: '16px' }}>
+              Create New Account
+            </div>
+
+            <div className="input-group">
+              <label>Email Address</label>
+              <div className="input-wrapper">
+                <FiMail style={{ position: 'absolute', left: '14px', color: 'var(--muted)' }} />
+                <input
+                  type="email"
+                  placeholder="name@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  style={{ paddingLeft: '40px' }}
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="input-group">
+              <label>Password</label>
+              <div className="input-wrapper">
+                <FiLock style={{ position: 'absolute', left: '14px', color: 'var(--muted)' }} />
+                <input
+                  type="password"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  style={{ paddingLeft: '40px' }}
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="input-group">
+              <label>Special Code (Optional)</label>
+              <div className="input-wrapper">
+                <FiShield style={{ position: 'absolute', left: '14px', color: 'var(--muted)' }} />
+                <input
+                  type="password"
+                  placeholder="Enter secret code if applicable"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  style={{ paddingLeft: '40px' }}
+                />
+              </div>
+              <small style={{ color: 'var(--muted)', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                If you have a BMC Officer code, enter it above to gain official access. Otherwise, leave blank for a Civilian account.
+              </small>
+            </div>
+
+            <button type="submit" className="btn-primary">
+              <FiUser style={{ marginRight: '6px' }} /> Create Account
+            </button>
+
+            <button type="button" className="btn-secondary" onClick={handleGoBack}>
+              <FiArrowLeft style={{ marginRight: '6px', verticalAlign: 'middle' }} /> Back
             </button>
           </form>
         )}
