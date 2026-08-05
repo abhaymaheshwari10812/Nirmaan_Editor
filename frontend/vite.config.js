@@ -13,5 +13,5 @@ export default defineConfig({
     },
   },
   plugins: [react()],
-  base: '/Nirmaan_Final/',
+  base: '/Nirmaan_Presentation/',
 })
